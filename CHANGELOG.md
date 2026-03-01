@@ -9,6 +9,11 @@
 - New inputs: `pipeline`, `github-token`, `exclude-jobs`, `poll-interval`
 - New output: `message_id` (Telegram message ID)
 - Telegram message editing via `editMessageText` for live updates
+- PR title display: for pull request events, shows PR title instead of branch name
+- Commit author display in pipeline messages
+- Total pipeline duration shown when all jobs complete
+- Skipped jobs displayed without duration
+- Spinner icon for in-progress pipeline (instead of yellow circle)
 - Modular code architecture: `models`, `telegram`, `message_builder`, `github_api`
 
 ### Changed

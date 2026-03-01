@@ -1,8 +1,13 @@
 import asyncio
+import dataclasses
 import logging
 import os
 
-from telegram_notifier.github_api import fetch_workflow_jobs, filter_jobs
+from telegram_notifier.github_api import (
+    fetch_pr_title,
+    fetch_workflow_jobs,
+    filter_jobs,
+)
 from telegram_notifier.message_builder import (
     build_legacy_message,
     build_pipeline_message,
@@ -27,13 +32,27 @@ def set_action_output(output_name: str, output_value: str) -> None:
 
 def _get_workflow_context() -> WorkflowContext:
     """Build WorkflowContext from GitHub environment variables."""
+    event_name = os.getenv("GITHUB_EVENT_NAME", "")
+    ref_name = os.getenv("GITHUB_REF_NAME", "")
+
+    # For pull_request events, extract PR number from ref (e.g. "1/merge")
+    pr_number: str | None = None
+    if event_name == "pull_request" and "/" in ref_name:
+        pr_number = ref_name.split("/")[0]
+
+    # For PRs use the head branch name instead of merge ref
+    ref = os.getenv("GITHUB_HEAD_REF", "") or ref_name
+
     return WorkflowContext(
         server_url=os.getenv("GITHUB_SERVER_URL", ""),
         repository=os.getenv("GITHUB_REPOSITORY", ""),
         workflow_name=os.getenv("GITHUB_WORKFLOW", ""),
-        ref=os.getenv("GITHUB_REF_NAME", ""),
+        ref=ref,
         sha=os.getenv("GITHUB_SHA", ""),
         run_id=os.getenv("GITHUB_RUN_ID", ""),
+        actor=os.getenv("GITHUB_ACTOR", ""),
+        event_name=event_name,
+        pr_number=pr_number,
     )
 
 
@@ -72,6 +91,12 @@ async def _run_pipeline_mode(
     poll_interval: int,
 ) -> None:
     """Pipeline progress mode: poll GitHub API and update Telegram message."""
+    # Fetch PR title if this is a pull_request event
+    if ctx.pr_number is not None:
+        pr_title = await fetch_pr_title(github_token, ctx.repository, ctx.pr_number)
+        if pr_title is not None:
+            ctx = dataclasses.replace(ctx, pr_title=pr_title)
+
     # Initial delay to let other jobs appear in the API
     await asyncio.sleep(_INITIAL_DELAY)
 

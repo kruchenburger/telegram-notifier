@@ -76,6 +76,31 @@ async def fetch_workflow_jobs(
     return jobs
 
 
+async def fetch_pr_title(
+    github_token: str,
+    repository: str,
+    pr_number: str,
+) -> str | None:
+    """Fetch PR title from the GitHub REST API."""
+    url = f"{_GITHUB_API_BASE}/repos/{repository}/pulls/{pr_number}"
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(url, headers=headers)
+        if response.status_code != 200:
+            logger.warning(
+                "Failed to fetch PR #%s: %s", pr_number, response.status_code
+            )
+            return None
+        data = response.json()
+        title: str = data["title"]
+        return title
+
+
 def filter_jobs(
     jobs: list[JobInfo],
     exclude_patterns: list[str],

@@ -15,7 +15,7 @@ _PIPELINE_ICONS: dict[str, str] = {
     "success": "\U0001f7e2",
     "failure": "\U0001f534",
     "cancelled": "\u26aa\ufe0f",
-    "in_progress": "\U0001f7e1",
+    "in_progress": "\U0001f504",
 }
 
 
@@ -44,6 +44,9 @@ def _job_icon(job: JobInfo) -> str:
 def _format_job_line(job: JobInfo) -> str:
     """Format a single job as one line of the message."""
     icon = _job_icon(job)
+    # Don't show duration for skipped/cancelled jobs — they didn't really run
+    if job.conclusion in ("skipped", "cancelled"):
+        return f"  {icon} {job.name}"
     duration = _format_duration(job.started_at, job.completed_at)
     duration_part = f"  <i>{duration}</i>" if duration else ""
     return f"  {icon} {job.name}{duration_part}"
@@ -64,6 +67,16 @@ def determine_overall_status(jobs: list[JobInfo]) -> str:
     return "in_progress"
 
 
+def _total_duration(jobs: list[JobInfo]) -> str:
+    """Calculate total pipeline duration from earliest start to latest completion."""
+    ran = [j for j in jobs if j.conclusion not in ("skipped", "cancelled")]
+    starts = [j.started_at for j in ran if j.started_at is not None]
+    ends = [j.completed_at for j in ran if j.completed_at is not None]
+    if not starts or not ends:
+        return ""
+    return _format_duration(min(starts), max(ends))
+
+
 def build_pipeline_message(
     ctx: WorkflowContext,
     jobs: list[JobInfo],
@@ -73,14 +86,26 @@ def build_pipeline_message(
     icon = _PIPELINE_ICONS.get(overall, "\u2753")
 
     header = f'{icon} <b><a href="{ctx.workflow_url}">{ctx.workflow_name}</a></b>\n'
+
+    # Show PR title if available, otherwise branch
+    if ctx.pr_title is not None and ctx.pr_url is not None:
+        ref_line = f'<b>PR:</b> <a href="{ctx.pr_url}">{ctx.pr_title}</a>\n'
+    else:
+        ref_line = f'<b>Branch:</b> <a href="{ctx.ref_url}">{ctx.ref}</a>\n'
+
     meta = (
         f'<b>Repo:</b> <a href="{ctx.repo_url}">{ctx.repository}</a>\n'
-        f'<b>Branch:</b> <a href="{ctx.ref_url}">{ctx.ref}</a>\n'
+        f"{ref_line}"
         f'<b>Commit:</b> <a href="{ctx.commit_url}">{ctx.sha:.7}</a>\n'
+        f"<b>Author:</b> {ctx.actor}\n"
     )
     job_lines = "\n".join(_format_job_line(job) for job in jobs)
 
-    return f"{header}{meta}\n{job_lines}"
+    # Total duration at the bottom (only when all jobs are done)
+    total = _total_duration(jobs)
+    footer = f"\n\n\u23f1 {total}" if total and overall != "in_progress" else ""
+
+    return f"{header}{meta}\n{job_lines}{footer}"
 
 
 def build_legacy_message(

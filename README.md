@@ -79,16 +79,36 @@ jobs:
 The Telegram message updates in real time:
 
 ```
-🟡 CI/CD
+🔄 CI/CD
 Repo: org/repo
-Branch: main
+PR: Add new feature
 Commit: abc1234
+Author: username
 
   ✅ Lint  23s
   🔄 Test
   ⏳ Build
   ⏳ Deploy
 ```
+
+When all jobs complete, a total duration and final status icon appear:
+
+```
+🟢 CI/CD
+Repo: org/repo
+Branch: main
+Commit: abc1234
+Author: username
+
+  ✅ Lint  23s
+  ✅ Test  1m 42s
+  ✅ Build  3m 12s
+  ⏭️ Deploy
+
+⏱ 3m 35s
+```
+
+For pull requests, the PR title is shown instead of the branch name. Skipped jobs are displayed without duration.
 
 ### Inputs
 

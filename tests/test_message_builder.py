@@ -5,6 +5,7 @@ from telegram_notifier.message_builder import (
     _format_duration,
     _format_job_line,
     _job_icon,
+    _total_duration,
     build_legacy_message,
     build_pipeline_message,
     determine_overall_status,
@@ -28,7 +29,10 @@ def _make_job(
     )
 
 
-def _make_ctx() -> WorkflowContext:
+def _make_ctx(
+    pr_title: str | None = None,
+    pr_number: str | None = None,
+) -> WorkflowContext:
     return WorkflowContext(
         server_url="https://github.com",
         repository="org/repo",
@@ -36,6 +40,10 @@ def _make_ctx() -> WorkflowContext:
         ref="main",
         sha="abc1234567890",
         run_id="42",
+        actor="testuser",
+        event_name="push",
+        pr_title=pr_title,
+        pr_number=pr_number,
     )
 
 
@@ -185,6 +193,19 @@ def test_format_job_line_without_duration() -> None:
     assert "<i>" not in line
 
 
+def test_format_job_line_skipped_no_duration() -> None:
+    job = _make_job(
+        name="Build",
+        conclusion="skipped",
+        started_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
+        completed_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
+    )
+    line = _format_job_line(job)
+    assert "\u23ed\ufe0f" in line
+    assert "Build" in line
+    assert "0s" not in line
+
+
 # --- determine_overall_status ---
 
 
@@ -266,7 +287,7 @@ def test_pipeline_message_with_pending() -> None:
         _make_job(name="Build", status="queued", conclusion=None),
     ]
     message = build_pipeline_message(ctx, jobs)
-    assert "\U0001f7e1" in message  # yellow circle
+    assert "\U0001f504" in message  # spinner
     assert "\u23f3 Build" in message
 
 
@@ -279,3 +300,76 @@ def test_pipeline_message_with_failure() -> None:
     message = build_pipeline_message(ctx, jobs)
     assert "\U0001f534" in message  # red circle
     assert "\u274c Test" in message
+
+
+def test_pipeline_message_shows_actor() -> None:
+    ctx = _make_ctx()
+    jobs = [_make_job(name="Lint")]
+    message = build_pipeline_message(ctx, jobs)
+    assert "testuser" in message
+
+
+def test_pipeline_message_shows_branch_for_push() -> None:
+    ctx = _make_ctx()
+    jobs = [_make_job(name="Lint")]
+    message = build_pipeline_message(ctx, jobs)
+    assert "<b>Branch:</b>" in message
+    assert "main" in message
+
+
+def test_pipeline_message_shows_pr_title() -> None:
+    ctx = _make_ctx(pr_title="Add pipeline tracking", pr_number="1")
+    jobs = [_make_job(name="Lint")]
+    message = build_pipeline_message(ctx, jobs)
+    assert "<b>PR:</b>" in message
+    assert "Add pipeline tracking" in message
+    assert "pull/1" in message
+    assert "<b>Branch:</b>" not in message
+
+
+# --- _total_duration ---
+
+
+def test_total_duration_all_completed() -> None:
+    jobs = [
+        _make_job(
+            name="Lint",
+            started_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
+            completed_at=datetime(2026, 1, 1, 12, 0, 23, tzinfo=UTC),
+        ),
+        _make_job(
+            name="Test",
+            started_at=datetime(2026, 1, 1, 12, 0, 5, tzinfo=UTC),
+            completed_at=datetime(2026, 1, 1, 12, 1, 42, tzinfo=UTC),
+        ),
+    ]
+    assert _total_duration(jobs) == "1m 42s"
+
+
+def test_total_duration_no_times() -> None:
+    jobs = [_make_job(name="Lint")]
+    assert _total_duration(jobs) == ""
+
+
+def test_pipeline_message_shows_total_duration_when_done() -> None:
+    ctx = _make_ctx()
+    jobs = [
+        _make_job(
+            name="Lint",
+            started_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
+            completed_at=datetime(2026, 1, 1, 12, 0, 30, tzinfo=UTC),
+        ),
+    ]
+    message = build_pipeline_message(ctx, jobs)
+    assert "\u23f1" in message  # stopwatch
+    assert "30s" in message
+
+
+def test_pipeline_message_no_total_duration_when_in_progress() -> None:
+    ctx = _make_ctx()
+    jobs = [
+        _make_job(name="Lint"),
+        _make_job(name="Test", status="in_progress", conclusion=None),
+    ]
+    message = build_pipeline_message(ctx, jobs)
+    assert "\u23f1" not in message

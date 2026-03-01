@@ -6,6 +6,7 @@ import respx
 from telegram_notifier.github_api import (
     _get_next_url,
     _parse_datetime,
+    fetch_pr_title,
     fetch_workflow_jobs,
     filter_jobs,
 )
@@ -131,3 +132,31 @@ async def test_fetch_workflow_jobs_parses_response() -> None:
     assert jobs[1].name == "Test"
     assert jobs[1].status == "in_progress"
     assert jobs[1].conclusion is None
+
+
+# --- fetch_pr_title ---
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_fetch_pr_title_success() -> None:
+    respx.get("https://api.github.com/repos/org/repo/pulls/1").mock(
+        return_value=httpx.Response(
+            200,
+            json={"title": "Add pipeline tracking", "number": 1},
+        )
+    )
+
+    title = await fetch_pr_title("fake-token", "org/repo", "1")
+    assert title == "Add pipeline tracking"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_fetch_pr_title_not_found() -> None:
+    respx.get("https://api.github.com/repos/org/repo/pulls/999").mock(
+        return_value=httpx.Response(404)
+    )
+
+    title = await fetch_pr_title("fake-token", "org/repo", "999")
+    assert title is None
