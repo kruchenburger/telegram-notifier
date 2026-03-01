@@ -1,13 +1,14 @@
-FROM python:3-slim AS builder
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt --target=/python
-
-FROM gcr.io/distroless/python3-debian12
-
-COPY --from=builder /python /python
-COPY . /app
-
+FROM python:3.13-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
-ENV PYTHONPATH "/python:/app"
-CMD ["/app/main.py"]
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+FROM python:3.13-slim
+WORKDIR /app
+ARG BUILD_VERSION=dev
+ENV APP_VERSION=${BUILD_VERSION}
+COPY --from=builder /app/.venv .venv
+COPY src/ src/
+ENV PATH="/app/.venv/bin:$PATH"
+CMD ["python", "-m", "telegram_notifier.main"]

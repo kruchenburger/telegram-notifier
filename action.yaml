@@ -1,19 +1,36 @@
 name: "Telegram Workflow Notifier"
-description: "Send notifications to Telegram"
+description: "Send CI/CD pipeline status notifications to Telegram with optional live progress tracking"
 author: "kruchenburger"
 inputs:
-  chat_id:
-    description: "Chat to send: chat_id or @channel_name"
-    required: true
   token:
     description: "Telegram Bot token"
     required: true
-  status:
-    description: "The current status of the job"
+  chat_id:
+    description: "Chat to send: chat_id or @channel_name"
     required: true
+  status:
+    description: "The current status of the job (legacy mode)"
+    required: false
+  pipeline:
+    description: "Enable pipeline tracking mode"
+    required: false
+    default: "false"
+  github-token:
+    description: "GitHub token for fetching workflow jobs (required when pipeline=true)"
+    required: false
+  exclude-jobs:
+    description: "Comma-separated job name patterns to exclude from display"
+    required: false
+    default: ""
+  poll-interval:
+    description: "Polling interval in seconds (pipeline mode)"
+    required: false
+    default: "15"
 outputs:
   status:
     description: "Returns the status of the message delivery"
+  message_id:
+    description: "Telegram message ID"
 runs:
   using: "docker"
   image: "Dockerfile"

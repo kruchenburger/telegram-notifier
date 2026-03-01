@@ -1,14 +1,34 @@
-name: Selftest
+name: CI
+
 on:
   push:
-    branches:
-      - master
+    branches: [master]
+  pull_request:
+    branches: [master]
 
 jobs:
-  selftest:
+  lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --frozen
+      - run: uv run pytest
+
+  selftest:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Self test
         id: selftest
         uses: kruchenburger/telegram-notifier@master
@@ -20,3 +40,14 @@ jobs:
       - name: Check outputs
         run: |
           test "${{ steps.selftest.outputs.status }}" == "Successfully delivered"
+
+  notify:
+    needs: [lint, test, selftest]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: kruchenburger/telegram-notifier@master
+        with:
+          token: ${{ secrets.TG_TOKEN }}
+          chat_id: ${{ secrets.TG_CHAT_ID }}
+          status: ${{ needs.selftest.result || needs.test.result || needs.lint.result }}
