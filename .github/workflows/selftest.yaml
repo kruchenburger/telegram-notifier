@@ -1,17 +1,61 @@
-name: Selftest
+name: CI
+
 on:
   push:
-    branches:
-      - master
+    branches: [master]
+  pull_request:
+    branches: [master]
 
 jobs:
-  selftest:
+  tracker:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pipeline tracker
+        id: tracker
+        continue-on-error: true
+        uses: ./
+        with:
+          token: ${{ secrets.TG_TOKEN }}
+          chat_id: ${{ secrets.TG_CHAT_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pipeline: true
+          exclude-jobs: tracker
+          poll-interval: "5"
+
+  lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --frozen
+      - run: uv run pytest
+
+  skipped-job:
+    if: false
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This never runs"
+
+  selftest:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Self test
         id: selftest
-        uses: kruchenburger/telegram-notifier@master
+        uses: ./
         with:
           status: ${{ job.status }}
           token: ${{ secrets.TG_TOKEN }}
