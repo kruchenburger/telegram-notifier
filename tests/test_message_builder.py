@@ -302,11 +302,11 @@ def test_pipeline_message_with_failure() -> None:
     assert "\u274c Test" in message
 
 
-def test_pipeline_message_shows_actor() -> None:
+def test_pipeline_message_shows_actor_as_link() -> None:
     ctx = _make_ctx()
     jobs = [_make_job(name="Lint")]
     message = build_pipeline_message(ctx, jobs)
-    assert "testuser" in message
+    assert '<a href="https://github.com/testuser">testuser</a>' in message
 
 
 def test_pipeline_message_shows_branch_for_push() -> None:

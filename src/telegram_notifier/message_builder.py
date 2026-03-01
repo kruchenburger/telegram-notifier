@@ -97,7 +97,7 @@ def build_pipeline_message(
         f'<b>Repo:</b> <a href="{ctx.repo_url}">{ctx.repository}</a>\n'
         f"{ref_line}"
         f'<b>Commit:</b> <a href="{ctx.commit_url}">{ctx.sha:.7}</a>\n'
-        f"<b>Author:</b> {ctx.actor}\n"
+        f'<b>Author:</b> <a href="{ctx.server_url}/{ctx.actor}">{ctx.actor}</a>\n'
     )
     job_lines = "\n".join(_format_job_line(job) for job in jobs)
 
