@@ -8,7 +8,7 @@ _JOB_ICONS: dict[str | None, str] = {
     "success": "\u2705",
     "failure": "\u274c",
     "cancelled": "\u26aa\ufe0f",
-    "skipped": "\u23ed\ufe0f",
+    "skipped": "\u2796",
 }
 
 _PIPELINE_ICONS: dict[str, str] = {

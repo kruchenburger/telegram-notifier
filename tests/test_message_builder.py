@@ -159,7 +159,7 @@ def test_job_icon_failure() -> None:
 
 
 def test_job_icon_skipped() -> None:
-    assert _job_icon(_make_job(conclusion="skipped")) == "\u23ed\ufe0f"
+    assert _job_icon(_make_job(conclusion="skipped")) == "\u2796"
 
 
 def test_job_icon_in_progress() -> None:
@@ -201,7 +201,7 @@ def test_format_job_line_skipped_no_duration() -> None:
         completed_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
     )
     line = _format_job_line(job)
-    assert "\u23ed\ufe0f" in line
+    assert "\u2796" in line
     assert "Build" in line
     assert "0s" not in line
 
