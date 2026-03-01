@@ -1,21 +1,21 @@
 # Telegram Notifier
 
-GitHub Action для отправки уведомлений о статусе CI/CD пайплайнов в Telegram.
+GitHub Action for sending CI/CD pipeline status notifications to Telegram.
 
-Поддерживает два режима:
+Supports two modes:
 
-- **Legacy** — одно сообщение со статусом job
-- **Pipeline** (v2) — живой трекинг всех jobs с автообновлением
+- **Legacy** — single message with job status
+- **Pipeline** (v2) — live tracking of all jobs with auto-updating message
 
-## Подготовка
+## Setup
 
-1. Зарегистрируйте бота через [@BotFather](https://t.me/botfather) и получите токен. [Инструкция](https://core.telegram.org/bots/features#creating-a-new-bot)
-2. Получите `chat_id` через [@username_to_id_bot](https://t.me/username_to_id_bot)
-3. Для отправки в канал или группу — добавьте бота туда
+1. Create a bot via [@BotFather](https://t.me/botfather) and get the token. [Guide](https://core.telegram.org/bots/features#creating-a-new-bot)
+2. Get your `chat_id` via [@username_to_id_bot](https://t.me/username_to_id_bot)
+3. To send to a channel or group — add the bot there
 
-## Legacy режим
+## Legacy mode
 
-Простое уведомление со статусом одного job:
+Simple notification with a single job status:
 
 ```yaml
 - name: Telegram Notification
@@ -27,9 +27,11 @@ GitHub Action для отправки уведомлений о статусе C
     chat_id: ${{ secrets.TG_CHAT_ID }}
 ```
 
-## Pipeline режим
+## Pipeline mode
 
-Один tracker job стартует параллельно с остальными, опрашивает GitHub API и обновляет одно Telegram-сообщение по мере завершения каждого job:
+A single tracker job starts in parallel with the rest, polls the GitHub API, and updates one Telegram message as each job completes.
+
+The `github-token` requires `actions: read` permission. The default `GITHUB_TOKEN` works — just add the permission to the tracker job:
 
 ```yaml
 jobs:
@@ -74,7 +76,7 @@ jobs:
       - run: echo "deploying..."
 ```
 
-Результат в Telegram обновляется в реальном времени:
+The Telegram message updates in real time:
 
 ```
 🟡 CI/CD
@@ -90,19 +92,19 @@ Commit: abc1234
 
 ### Inputs
 
-| Input          | Описание                                            | Обязателен       |
+| Input          | Description                                         | Required         |
 | -------------- | --------------------------------------------------- | ---------------- |
-| `token`        | Telegram API токен бота                             | Да               |
-| `chat_id`      | ID чата или `@channel_name`                         | Да               |
-| `status`       | Статус job (legacy режим)                           | Legacy режим     |
-| `pipeline`     | Включить pipeline трекинг (`true`/`false`)          | Нет (`false`)    |
-| `github-token` | GitHub token для доступа к API                      | Pipeline режим   |
-| `exclude-jobs` | Паттерны имён jobs для исключения (через запятую)   | Нет              |
-| `poll-interval` | Интервал опроса в секундах                         | Нет (`15`)       |
+| `token`        | Telegram Bot API token                              | Yes              |
+| `chat_id`      | Chat ID or `@channel_name`                          | Yes              |
+| `status`       | Job status (legacy mode)                            | Legacy mode      |
+| `pipeline`     | Enable pipeline tracking (`true`/`false`)           | No (`false`)     |
+| `github-token` | GitHub token for API access                         | Pipeline mode    |
+| `exclude-jobs` | Comma-separated job name patterns to exclude        | No               |
+| `poll-interval` | Polling interval in seconds                        | No (`15`)        |
 
 ### Outputs
 
-| Output       | Описание                      |
+| Output       | Description                   |
 | ------------ | ----------------------------- |
-| `status`     | Статус доставки               |
-| `message_id` | ID Telegram-сообщения         |
+| `status`     | Delivery status               |
+| `message_id` | Telegram message ID           |
