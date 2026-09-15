@@ -1,4 +1,6 @@
 # pyright: reportPrivateUsage=false
+import dataclasses
+import re
 from datetime import UTC, datetime
 
 from telegram_notifier.message_builder import (
@@ -11,6 +13,8 @@ from telegram_notifier.message_builder import (
     determine_overall_status,
 )
 from telegram_notifier.models import JobInfo, WorkflowContext
+
+_OWN_TAGS = ("<b>", "</b>", "<i>", "</i>", '<a href="', "</a>")
 
 
 def _make_job(
@@ -373,3 +377,74 @@ def test_pipeline_message_no_total_duration_when_in_progress() -> None:
     ]
     message = build_pipeline_message(ctx, jobs)
     assert "\u23f1" not in message
+
+
+# --- HTML escaping (INFRA-11) ---
+
+
+def test_format_job_line_escapes_html_in_job_name() -> None:
+    job = _make_job(name="Contract gate (shard 1, target <=7m)")
+    line = _format_job_line(job)
+    assert "target &lt;=7m)" in line
+    assert "<=7m" not in line
+
+
+def test_pipeline_message_escapes_all_user_controlled_fields() -> None:
+    ctx = WorkflowContext(
+        server_url="https://github.com",
+        repository="org/re<po>",
+        workflow_name="CI <fast & furious>",
+        ref="feat/a<b",
+        sha="abc1234567890",
+        run_id="42",
+        actor="user<script>",
+        event_name="push",
+    )
+    jobs = [_make_job(name="Lint & test <=2m")]
+    message = build_pipeline_message(ctx, jobs)
+    assert "CI &lt;fast &amp; furious&gt;" in message
+    assert "org/re&lt;po&gt;" in message
+    assert "feat/a&lt;b" in message
+    assert "user&lt;script&gt;" in message
+    assert "Lint &amp; test &lt;=2m" in message
+    _assert_only_own_markup(message)
+
+
+def _assert_only_own_markup(message: str) -> None:
+    """Every '<' must open one of our own tags; hrefs must carry no raw < or quotes."""
+    for match in re.finditer("<", message):
+        assert message.startswith(_OWN_TAGS, match.start()), message[match.start() :]
+    for href in re.findall(r'<a href="([^"]*)"', message):
+        assert "<" not in href and '"' not in href, href
+
+
+def test_pipeline_message_escapes_urls_in_href() -> None:
+    ctx = _make_ctx()
+    ctx = dataclasses.replace(ctx, ref='feat/a<b"c')
+    message = build_pipeline_message(ctx, [_make_job(name="Lint")])
+    assert 'href="https://github.com/org/repo/tree/feat/a&lt;b&quot;c"' in message
+    _assert_only_own_markup(message)
+
+
+def test_pipeline_message_escapes_pr_title() -> None:
+    ctx = _make_ctx(pr_title="fix: handle a < b && c > d", pr_number="7")
+    message = build_pipeline_message(ctx, [_make_job(name="Lint")])
+    assert "fix: handle a &lt; b &amp;&amp; c &gt; d" in message
+    assert "a < b" not in message
+
+
+def test_legacy_message_escapes_html() -> None:
+    message = build_legacy_message(
+        github_url="https://github.com",
+        repo_name="org/re<po>",
+        workflow_name="CI <=5m>",
+        ref="feat/a<b",
+        commit="abc1234567890",
+        run_id="42",
+        status="succ<ess>",
+    )
+    assert "CI &lt;=5m&gt;" in message
+    assert "org/re&lt;po&gt;" in message
+    assert "feat/a&lt;b" in message
+    assert "succ&lt;ess&gt;" in message
+    assert "<=5m>" not in message

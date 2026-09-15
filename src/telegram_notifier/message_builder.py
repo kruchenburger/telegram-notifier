@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from html import escape
 
 from telegram_notifier.models import JobInfo, WorkflowContext
 
@@ -41,15 +42,29 @@ def _job_icon(job: JobInfo) -> str:
     return "\u23f3"
 
 
+def _link(url: str, text: str) -> str:
+    """Render an HTML link with both the URL and the label escaped.
+
+    Every value here ultimately comes from the workflow or GitHub context
+    (job names, branch names, PR titles, actor) and may contain <, >, & or
+    quotes; unescaped they make Telegram reject the whole message with
+    "Can't parse entities".
+    """
+    return f'<a href="{escape(url, quote=True)}">{escape(text)}</a>'
+
+
 def _format_job_line(job: JobInfo) -> str:
     """Format a single job as one line of the message."""
     icon = _job_icon(job)
+    # Job names come from user workflows and may contain <, > or & — escape them,
+    # otherwise Telegram rejects the message with "Can't parse entities".
+    name = escape(job.name)
     # Don't show duration for skipped/cancelled jobs — they didn't really run
     if job.conclusion in ("skipped", "cancelled"):
-        return f"  {icon} {job.name}"
+        return f"  {icon} {name}"
     duration = _format_duration(job.started_at, job.completed_at)
     duration_part = f"  <i>{duration}</i>" if duration else ""
-    return f"  {icon} {job.name}{duration_part}"
+    return f"  {icon} {name}{duration_part}"
 
 
 def determine_overall_status(jobs: list[JobInfo]) -> str:
@@ -85,19 +100,19 @@ def build_pipeline_message(
     overall = determine_overall_status(jobs)
     icon = _PIPELINE_ICONS.get(overall, "\u2753")
 
-    header = f'{icon} <b><a href="{ctx.workflow_url}">{ctx.workflow_name}</a></b>\n'
+    header = f"{icon} <b>{_link(ctx.workflow_url, ctx.workflow_name)}</b>\n"
 
     # Show PR title if available, otherwise branch
     if ctx.pr_title is not None and ctx.pr_url is not None:
-        ref_line = f'<b>PR:</b> <a href="{ctx.pr_url}">{ctx.pr_title}</a>\n'
+        ref_line = f"<b>PR:</b> {_link(ctx.pr_url, ctx.pr_title)}\n"
     else:
-        ref_line = f'<b>Branch:</b> <a href="{ctx.ref_url}">{ctx.ref}</a>\n'
+        ref_line = f"<b>Branch:</b> {_link(ctx.ref_url, ctx.ref)}\n"
 
     meta = (
-        f'<b>Repo:</b> <a href="{ctx.repo_url}">{ctx.repository}</a>\n'
+        f"<b>Repo:</b> {_link(ctx.repo_url, ctx.repository)}\n"
         f"{ref_line}"
-        f'<b>Commit:</b> <a href="{ctx.commit_url}">{ctx.sha:.7}</a>\n'
-        f'<b>Author:</b> <a href="{ctx.server_url}/{ctx.actor}">{ctx.actor}</a>\n'
+        f"<b>Commit:</b> {_link(ctx.commit_url, ctx.sha[:7])}\n"
+        f"<b>Author:</b> {_link(f'{ctx.server_url}/{ctx.actor}', ctx.actor)}\n"
     )
     job_lines = "\n".join(_format_job_line(job) for job in jobs)
 
@@ -132,9 +147,9 @@ def build_legacy_message(
     status_icon = status_map.get(status.lower(), "\u2753")
 
     return (
-        f'<b>Repository:</b> <a href="{repo_url}">{repo_name}</a>\n'
-        f'<b>Workflow:</b> <a href="{workflow_url}">{workflow_name}</a>\n'
-        f'<b>Branch:</b> <a href="{ref_url}">{ref}</a>\n'
-        f'<b>Commit:</b> <a href="{commit_url}">{commit:.7}</a>\n'
-        f"<b>Status:</b> {status} {status_icon}"
+        f"<b>Repository:</b> {_link(repo_url, repo_name)}\n"
+        f"<b>Workflow:</b> {_link(workflow_url, workflow_name)}\n"
+        f"<b>Branch:</b> {_link(ref_url, ref)}\n"
+        f"<b>Commit:</b> {_link(commit_url, commit[:7])}\n"
+        f"<b>Status:</b> {escape(status)} {status_icon}"
     )

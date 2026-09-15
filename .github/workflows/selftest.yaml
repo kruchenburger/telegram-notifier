@@ -35,6 +35,8 @@ jobs:
       - run: uv run ruff format --check .
 
   test:
+    # Name with HTML-special characters: guards INFRA-11 against real Telegram parsing
+    name: "Tests (pytest, target <=2m & no flakes)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
