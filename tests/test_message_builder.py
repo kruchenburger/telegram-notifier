@@ -3,6 +3,9 @@ import dataclasses
 import re
 from datetime import UTC, datetime
 
+from hypothesis import given
+from hypothesis import strategies as st
+
 from telegram_notifier.message_builder import (
     _format_duration,
     _format_job_line,
@@ -448,3 +451,74 @@ def test_legacy_message_escapes_html() -> None:
     assert "feat/a&lt;b" in message
     assert "succ&lt;ess&gt;" in message
     assert "<=5m>" not in message
+
+
+# --- the escaping rule, as a property ---
+
+# A plain st.text() almost never produces "<", so a property built on it passes
+# even with escaping removed. Bias the alphabet towards the characters that break
+# Telegram's HTML parser, mixed with ordinary ones.
+_TEXT = st.text(
+    alphabet=st.one_of(st.sampled_from("<>&\"'/= "), st.characters()),
+    min_size=0,
+    max_size=60,
+)
+
+
+@given(
+    workflow_name=_TEXT,
+    repository=_TEXT,
+    ref=_TEXT,
+    actor=_TEXT,
+    job_name=_TEXT,
+)
+def test_pipeline_message_never_emits_foreign_markup(
+    workflow_name: str,
+    repository: str,
+    ref: str,
+    actor: str,
+    job_name: str,
+) -> None:
+    """For ANY text GitHub hands us, the only tags in the message are our own.
+
+    This is the rule the fix defends; the literal cases above are examples of it.
+    """
+    ctx = WorkflowContext(
+        server_url="https://github.com",
+        repository=repository,
+        workflow_name=workflow_name,
+        ref=ref,
+        sha="abc1234567890",
+        run_id="42",
+        actor=actor,
+        event_name="push",
+    )
+    message = build_pipeline_message(ctx, [_make_job(name=job_name)])
+    _assert_only_own_markup(message)
+
+
+@given(pr_title=_TEXT)
+def test_pipeline_message_never_emits_foreign_markup_for_pr_titles(
+    pr_title: str,
+) -> None:
+    ctx = _make_ctx(pr_title=pr_title, pr_number="7")
+    _assert_only_own_markup(build_pipeline_message(ctx, [_make_job(name="Lint")]))
+
+
+@given(repo_name=_TEXT, workflow_name=_TEXT, ref=_TEXT, status=_TEXT)
+def test_legacy_message_never_emits_foreign_markup(
+    repo_name: str,
+    workflow_name: str,
+    ref: str,
+    status: str,
+) -> None:
+    message = build_legacy_message(
+        github_url="https://github.com",
+        repo_name=repo_name,
+        workflow_name=workflow_name,
+        ref=ref,
+        commit="abc1234567890",
+        run_id="42",
+        status=status,
+    )
+    _assert_only_own_markup(message)
