@@ -1,5 +1,10 @@
 # pyright: reportPrivateUsage=false
+import dataclasses
+import re
 from datetime import UTC, datetime
+
+from hypothesis import given
+from hypothesis import strategies as st
 
 from telegram_notifier.message_builder import (
     _format_duration,
@@ -11,6 +16,8 @@ from telegram_notifier.message_builder import (
     determine_overall_status,
 )
 from telegram_notifier.models import JobInfo, WorkflowContext
+
+_OWN_TAGS = ("<b>", "</b>", "<i>", "</i>", '<a href="', "</a>")
 
 
 def _make_job(
@@ -373,3 +380,145 @@ def test_pipeline_message_no_total_duration_when_in_progress() -> None:
     ]
     message = build_pipeline_message(ctx, jobs)
     assert "\u23f1" not in message
+
+
+# --- HTML escaping (INFRA-11) ---
+
+
+def test_format_job_line_escapes_html_in_job_name() -> None:
+    job = _make_job(name="Contract gate (shard 1, target <=7m)")
+    line = _format_job_line(job)
+    assert "target &lt;=7m)" in line
+    assert "<=7m" not in line
+
+
+def test_pipeline_message_escapes_all_user_controlled_fields() -> None:
+    ctx = WorkflowContext(
+        server_url="https://github.com",
+        repository="org/re<po>",
+        workflow_name="CI <fast & furious>",
+        ref="feat/a<b",
+        sha="abc1234567890",
+        run_id="42",
+        actor="user<script>",
+        event_name="push",
+    )
+    jobs = [_make_job(name="Lint & test <=2m")]
+    message = build_pipeline_message(ctx, jobs)
+    assert "CI &lt;fast &amp; furious&gt;" in message
+    assert "org/re&lt;po&gt;" in message
+    assert "feat/a&lt;b" in message
+    assert "user&lt;script&gt;" in message
+    assert "Lint &amp; test &lt;=2m" in message
+    _assert_only_own_markup(message)
+
+
+def _assert_only_own_markup(message: str) -> None:
+    """Every '<' must open one of our own tags; hrefs must carry no raw < or quotes."""
+    for match in re.finditer("<", message):
+        assert message.startswith(_OWN_TAGS, match.start()), message[match.start() :]
+    for href in re.findall(r'<a href="([^"]*)"', message):
+        assert "<" not in href and '"' not in href, href
+
+
+def test_pipeline_message_escapes_urls_in_href() -> None:
+    ctx = _make_ctx()
+    ctx = dataclasses.replace(ctx, ref='feat/a<b"c')
+    message = build_pipeline_message(ctx, [_make_job(name="Lint")])
+    assert 'href="https://github.com/org/repo/tree/feat/a&lt;b&quot;c"' in message
+    _assert_only_own_markup(message)
+
+
+def test_pipeline_message_escapes_pr_title() -> None:
+    ctx = _make_ctx(pr_title="fix: handle a < b && c > d", pr_number="7")
+    message = build_pipeline_message(ctx, [_make_job(name="Lint")])
+    assert "fix: handle a &lt; b &amp;&amp; c &gt; d" in message
+    assert "a < b" not in message
+
+
+def test_legacy_message_escapes_html() -> None:
+    message = build_legacy_message(
+        github_url="https://github.com",
+        repo_name="org/re<po>",
+        workflow_name="CI <=5m>",
+        ref="feat/a<b",
+        commit="abc1234567890",
+        run_id="42",
+        status="succ<ess>",
+    )
+    assert "CI &lt;=5m&gt;" in message
+    assert "org/re&lt;po&gt;" in message
+    assert "feat/a&lt;b" in message
+    assert "succ&lt;ess&gt;" in message
+    assert "<=5m>" not in message
+
+
+# --- the escaping rule, as a property ---
+
+# A plain st.text() almost never produces "<", so a property built on it passes
+# even with escaping removed. Bias the alphabet towards the characters that break
+# Telegram's HTML parser, mixed with ordinary ones.
+_TEXT = st.text(
+    alphabet=st.one_of(st.sampled_from("<>&\"'/= "), st.characters()),
+    min_size=0,
+    max_size=60,
+)
+
+
+@given(
+    workflow_name=_TEXT,
+    repository=_TEXT,
+    ref=_TEXT,
+    actor=_TEXT,
+    job_name=_TEXT,
+)
+def test_pipeline_message_never_emits_foreign_markup(
+    workflow_name: str,
+    repository: str,
+    ref: str,
+    actor: str,
+    job_name: str,
+) -> None:
+    """For ANY text GitHub hands us, the only tags in the message are our own.
+
+    This is the rule the fix defends; the literal cases above are examples of it.
+    """
+    ctx = WorkflowContext(
+        server_url="https://github.com",
+        repository=repository,
+        workflow_name=workflow_name,
+        ref=ref,
+        sha="abc1234567890",
+        run_id="42",
+        actor=actor,
+        event_name="push",
+    )
+    message = build_pipeline_message(ctx, [_make_job(name=job_name)])
+    _assert_only_own_markup(message)
+
+
+@given(pr_title=_TEXT)
+def test_pipeline_message_never_emits_foreign_markup_for_pr_titles(
+    pr_title: str,
+) -> None:
+    ctx = _make_ctx(pr_title=pr_title, pr_number="7")
+    _assert_only_own_markup(build_pipeline_message(ctx, [_make_job(name="Lint")]))
+
+
+@given(repo_name=_TEXT, workflow_name=_TEXT, ref=_TEXT, status=_TEXT)
+def test_legacy_message_never_emits_foreign_markup(
+    repo_name: str,
+    workflow_name: str,
+    ref: str,
+    status: str,
+) -> None:
+    message = build_legacy_message(
+        github_url="https://github.com",
+        repo_name=repo_name,
+        workflow_name=workflow_name,
+        ref=ref,
+        commit="abc1234567890",
+        run_id="42",
+        status=status,
+    )
+    _assert_only_own_markup(message)

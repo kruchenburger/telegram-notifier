@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1] - 2026-09-15
+
+### Fixed
+
+- HTML-special characters (`<`, `>`, `&`, quotes) in job names, workflow name, PR title, branch, repository, actor and status are now escaped before sending. Previously a job named like `Contract gate (target <=7m)` made Telegram reject the whole message with `Can't parse entities` and the tracker crashed (INFRA-11)
+- Link URLs are escaped as HTML attributes as well, so branch names with `<` or `"` no longer break the message
+
 ## [2.0.0] - 2026-03-01
 
 ### Added
