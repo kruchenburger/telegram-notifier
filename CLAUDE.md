@@ -59,7 +59,7 @@ uv run pytest                    # Tests
 - Tracker job starts in parallel with other jobs
 - Polls GitHub API every N seconds
 - Updates a single Telegram message as jobs complete
-- Finishes when all jobs are completed
+- Finishes when all jobs are completed and no new job appears for 60 seconds
 
 ## Action Inputs / Outputs
 

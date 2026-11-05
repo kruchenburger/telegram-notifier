@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 _DEFAULT_POLL_INTERVAL = 15
 _INITIAL_DELAY = 5
 _MAX_POLL_DURATION = 60 * 60  # 60 minutes
+# A job with `needs` appears in the API only after its dependencies finish.
+_COMPLETION_GRACE = 60
 
 
 def set_action_output(output_name: str, output_value: str) -> None:
@@ -113,13 +115,9 @@ async def _run_pipeline_mode(
     set_action_output("message_id", str(msg_id))
     logger.info("Sent initial pipeline message (message_id=%d)", msg_id)
 
-    # Check if already done
-    if _all_completed(filtered):
-        set_action_output("status", "Successfully delivered")
-        return
-
     # Polling loop
     elapsed = 0
+    completed_for = 0
     while elapsed < _MAX_POLL_DURATION:
         await asyncio.sleep(poll_interval)
         elapsed += poll_interval
@@ -137,7 +135,11 @@ async def _run_pipeline_mode(
             current_text = new_text
             logger.info("Updated pipeline message")
 
-        if _all_completed(filtered):
+        if not _all_completed(filtered):
+            completed_for = 0
+            continue
+        completed_for += poll_interval
+        if completed_for >= _COMPLETION_GRACE:
             break
 
     overall = determine_overall_status(filtered)
