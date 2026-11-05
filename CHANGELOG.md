@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.2] - 2026-11-05
+
+### Fixed
+
+- Pipeline mode no longer reports a run as finished between chained jobs: a job with `needs` appears in the GitHub API only after its dependencies finish, so the tracker now waits 60 seconds with no new jobs before it stops.
+
 ## [2.0.1] - 2026-09-15
 
 ### Fixed
