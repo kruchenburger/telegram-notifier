@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Skipped matrix jobs no longer show a raw template such as `shard ${{ matrix.shard_index }}` in the message. GitHub reports a skipped matrix job before its matrix expands, so unexpanded `${{ … }}` expressions in job names are now shown as `*`.
+
 ## [2.0.2] - 2026-11-05
 
 ### Fixed
