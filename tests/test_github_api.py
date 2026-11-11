@@ -4,6 +4,7 @@ import pytest
 import respx
 
 from telegram_notifier.github_api import (
+    _clean_job_name,
     _get_next_url,
     _parse_datetime,
     fetch_pr_title,
@@ -25,6 +26,24 @@ def test_parse_datetime_iso_format() -> None:
 
 def test_parse_datetime_none() -> None:
     assert _parse_datetime(None) is None
+
+
+# --- _clean_job_name ---
+
+
+def test_clean_job_name_replaces_unexpanded_matrix_expression() -> None:
+    raw = "Schemathesis contract gate (shard ${{ matrix.shard_index }}, target <=7m)"
+    assert _clean_job_name(raw) == "Schemathesis contract gate (shard *, target <=7m)"
+
+
+def test_clean_job_name_keeps_expanded_names() -> None:
+    assert _clean_job_name("Database-backed backend tests (shard 3)") == (
+        "Database-backed backend tests (shard 3)"
+    )
+
+
+def test_clean_job_name_replaces_every_expression() -> None:
+    assert _clean_job_name("${{ a }} x ${{b}}") == "* x *"
 
 
 # --- _get_next_url ---

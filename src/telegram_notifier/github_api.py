@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 
 import httpx
@@ -10,6 +11,15 @@ from telegram_notifier.models import JobInfo
 logger = logging.getLogger(__name__)
 
 _GITHUB_API_BASE = "https://api.github.com"
+
+# A skipped matrix job is reported before its matrix expands, so GitHub returns
+# the raw template, e.g. "Gate (shard ${{ matrix.shard_index }})".
+_UNEXPANDED_EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
+
+
+def _clean_job_name(name: str) -> str:
+    """Replace unexpanded workflow expressions in a job name with '*'."""
+    return _UNEXPANDED_EXPRESSION.sub("*", name)
 
 
 def _parse_datetime(value: str | None) -> datetime | None:
@@ -62,7 +72,7 @@ async def fetch_workflow_jobs(
             for job in data["jobs"]:
                 jobs.append(
                     JobInfo(
-                        name=job["name"],
+                        name=_clean_job_name(job["name"]),
                         status=job["status"],
                         conclusion=job.get("conclusion"),
                         started_at=_parse_datetime(job.get("started_at")),
